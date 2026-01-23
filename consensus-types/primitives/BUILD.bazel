@@ -4,6 +4,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "basis_points.go",
+        "block_timeliness.go",
         "builder_index.go",
         "committee_bits_mainnet.go",
         "committee_bits_minimal.go",  # keep

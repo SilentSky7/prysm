@@ -16,6 +16,9 @@ import (
 // Our implementation allows to pass aggregates for different attestation data, in which case the function will return
 // one final aggregate per attestation data.
 //
+// Note: Since block_timeliness is now part of AttestationData, aggregates are automatically grouped
+// by timeliness value. The aggregation_bits.Count() gives the vote count for that timeliness value.
+//
 // Spec definition:
 //
 //	def compute_on_chain_aggregate(network_aggregates: Sequence[Attestation]) -> Attestation:
@@ -84,6 +87,8 @@ func computeOnChainAggregate(aggregates []ethpb.Att) ([]ethpb.Att, error) {
 			aggregationBits.SetBitAt(bi, true)
 		}
 
+		// block_timeliness is now part of AttestationData (in aggs[0].GetData()),
+		// so it's automatically included and signed by validators
 		att := &ethpb.AttestationElectra{
 			AggregationBits: aggregationBits,
 			Data:            aggs[0].GetData(),

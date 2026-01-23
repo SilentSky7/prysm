@@ -111,5 +111,9 @@ func AggregatePair(a1, a2 *ethpb.Attestation) (*ethpb.Attestation, error) {
 	baseAtt.Signature = aggregatedSig.Marshal()
 	baseAtt.AggregationBits = newBits
 
+	// Note: block_timeliness is now part of AttestationData, so only attestations
+	// with identical timeliness values can be aggregated together.
+	// The aggregation_bits.Count() gives the vote count for that timeliness value.
+
 	return baseAtt, nil
 }

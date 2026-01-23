@@ -27,6 +27,12 @@ type Att interface {
 	GetSignature() []byte
 	SetSignature(sig []byte)
 	GetCommitteeIndex() primitives.CommitteeIndex
+	// GetBlockTimeliness returns the block timeliness vote for this attestation.
+	// The timeliness is stored in AttestationData and covered by the signature.
+	GetBlockTimeliness() primitives.BlockTimeliness
+	// SetBlockTimeliness sets the block timeliness vote for this attestation.
+	// This modifies the AttestationData, so it must be called before signing.
+	SetBlockTimeliness(timeliness primitives.BlockTimeliness)
 }
 
 // IndexedAtt defines common functionality for all indexed attestation types.
@@ -101,6 +107,7 @@ func (attData *AttestationData) Copy() *AttestationData {
 		BeaconBlockRoot: bytesutil.SafeCopyBytes(attData.BeaconBlockRoot),
 		Source:          attData.Source.Copy(),
 		Target:          attData.Target.Copy(),
+		BlockTimeliness: attData.BlockTimeliness,
 	}
 }
 
@@ -136,7 +143,7 @@ func (a *Attestation) Copy() *Attestation {
 	}
 	return &Attestation{
 		AggregationBits: bytesutil.SafeCopyBytes(a.AggregationBits),
-		Data:            a.Data.Copy(),
+		Data:            a.Data.Copy(), // Data.Copy() includes BlockTimeliness
 		Signature:       bytesutil.SafeCopyBytes(a.Signature),
 	}
 }
@@ -164,6 +171,23 @@ func (a *Attestation) GetCommitteeIndex() primitives.CommitteeIndex {
 		return 0
 	}
 	return a.Data.CommitteeIndex
+}
+
+// GetBlockTimeliness returns the block timeliness vote for this attestation.
+// The timeliness is stored in AttestationData and is covered by the signature.
+func (a *Attestation) GetBlockTimeliness() primitives.BlockTimeliness {
+	if a == nil || a.Data == nil {
+		return 0
+	}
+	return primitives.BlockTimeliness(a.Data.BlockTimeliness)
+}
+
+// SetBlockTimeliness sets the block timeliness vote for this attestation.
+// This modifies the AttestationData, so it must be called before signing.
+func (a *Attestation) SetBlockTimeliness(timeliness primitives.BlockTimeliness) {
+	if a != nil && a.Data != nil {
+		a.Data.BlockTimeliness = uint32(timeliness)
+	}
 }
 
 // Version --
@@ -230,6 +254,23 @@ func (a *PendingAttestation) GetCommitteeIndex() primitives.CommitteeIndex {
 	return a.Data.CommitteeIndex
 }
 
+// GetBlockTimeliness returns the block timeliness vote for this attestation.
+// PendingAttestation gets timeliness from its data.
+func (a *PendingAttestation) GetBlockTimeliness() primitives.BlockTimeliness {
+	if a == nil || a.Data == nil {
+		return 0
+	}
+	return primitives.BlockTimeliness(a.Data.BlockTimeliness)
+}
+
+// SetBlockTimeliness sets the block timeliness vote for this attestation.
+// This modifies the AttestationData.
+func (a *PendingAttestation) SetBlockTimeliness(timeliness primitives.BlockTimeliness) {
+	if a != nil && a.Data != nil {
+		a.Data.BlockTimeliness = uint32(timeliness)
+	}
+}
+
 // Version --
 func (a *AttestationElectra) Version() int {
 	return version.Electra
@@ -263,7 +304,7 @@ func (a *AttestationElectra) Copy() *AttestationElectra {
 	return &AttestationElectra{
 		AggregationBits: bytesutil.SafeCopyBytes(a.AggregationBits),
 		CommitteeBits:   bytesutil.SafeCopyBytes(a.CommitteeBits),
-		Data:            a.Data.Copy(),
+		Data:            a.Data.Copy(), // Data.Copy() includes BlockTimeliness
 		Signature:       bytesutil.SafeCopyBytes(a.Signature),
 	}
 }
@@ -295,6 +336,23 @@ func (a *AttestationElectra) GetCommitteeIndex() primitives.CommitteeIndex {
 		log.WithField("indices", a.CommitteeBits).Debugf("expected 1 committee bit indice got %d", len(indices))
 	}
 	return primitives.CommitteeIndex(uint64(indices[0]))
+}
+
+// GetBlockTimeliness returns the block timeliness vote for this attestation.
+// The timeliness is stored in AttestationData and is covered by the signature.
+func (a *AttestationElectra) GetBlockTimeliness() primitives.BlockTimeliness {
+	if a == nil || a.Data == nil {
+		return 0
+	}
+	return primitives.BlockTimeliness(a.Data.BlockTimeliness)
+}
+
+// SetBlockTimeliness sets the block timeliness vote for this attestation.
+// This modifies the AttestationData, so it must be called before signing.
+func (a *AttestationElectra) SetBlockTimeliness(timeliness primitives.BlockTimeliness) {
+	if a != nil && a.Data != nil {
+		a.Data.BlockTimeliness = uint32(timeliness)
+	}
 }
 
 // Version --
@@ -330,7 +388,7 @@ func (a *SingleAttestation) Copy() *SingleAttestation {
 	return &SingleAttestation{
 		CommitteeId:   a.CommitteeId,
 		AttesterIndex: a.AttesterIndex,
-		Data:          a.Data.Copy(),
+		Data:          a.Data.Copy(), // Data.Copy() includes BlockTimeliness
 		Signature:     bytesutil.SafeCopyBytes(a.Signature),
 	}
 }
@@ -362,6 +420,23 @@ func (a *SingleAttestation) GetCommitteeIndex() primitives.CommitteeIndex {
 	return a.CommitteeId
 }
 
+// GetBlockTimeliness returns the block timeliness vote for this attestation.
+// The timeliness is stored in AttestationData and is covered by the signature.
+func (a *SingleAttestation) GetBlockTimeliness() primitives.BlockTimeliness {
+	if a == nil || a.Data == nil {
+		return 0
+	}
+	return primitives.BlockTimeliness(a.Data.BlockTimeliness)
+}
+
+// SetBlockTimeliness sets the block timeliness vote for this attestation.
+// This modifies the AttestationData, so it must be called before signing.
+func (a *SingleAttestation) SetBlockTimeliness(timeliness primitives.BlockTimeliness) {
+	if a != nil && a.Data != nil {
+		a.Data.BlockTimeliness = uint32(timeliness)
+	}
+}
+
 // ToAttestationElectra converts the attestation to an AttestationElectra.
 func (a *SingleAttestation) ToAttestationElectra(committee []primitives.ValidatorIndex) *AttestationElectra {
 	cb := primitives.NewAttestationCommitteeBits()
@@ -377,7 +452,7 @@ func (a *SingleAttestation) ToAttestationElectra(committee []primitives.Validato
 
 	return &AttestationElectra{
 		AggregationBits: ab,
-		Data:            a.Data,
+		Data:            a.Data, // Data contains BlockTimeliness, covered by signature
 		Signature:       a.Signature,
 		CommitteeBits:   cb,
 	}

@@ -172,6 +172,8 @@ func aggregateAttestations(atts []ethpb.Att, keys []int, coverage *bitfield.Bitl
 		}
 	}
 	// Put aggregated attestation at a position of the first selected attestation.
+	// Note: BlockTimeliness is in AttestationData, so all attestations being aggregated
+	// must have the same timeliness value (since they have the same data).
 	if atts[0].Version() == version.Phase0 {
 		atts[targetIdx] = &ethpb.Attestation{
 			// Append size byte, which will be unnecessary on switch to Bitlist64.

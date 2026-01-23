@@ -91,6 +91,12 @@ message AttestationData {
   // The checkpoint attempting to be justified for the current epoch and its
   // epoch boundary block
   Checkpoint target = 5;
+
+  // Block timeliness vote: indicates the time window when the block was received.
+  // This is a discrete value representing time intervals (0=0-1s, 1=1-2s, etc.).
+  // Used for dynamic proposer reward mechanism.
+  // Being part of AttestationData ensures it is covered by validator signature.
+  uint32 block_timeliness = 6;
 }
 
 message Checkpoint {
