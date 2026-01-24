@@ -203,7 +203,19 @@ load("@prysm//tools:image_deps.bzl", "prysm_image_deps")
 
 prysm_image_deps()
 
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
+load("@io_bazel_rules_go//go:deps.bzl", "go_download_sdk", "go_register_toolchains", "go_rules_dependencies")
+
+# define go sdk download rule, you can configure mirror sites here
+go_download_sdk(
+    name = "go_sdk",
+    goos = "linux",
+    goarch = "amd64",
+    version = "1.25.1",
+    urls = [
+        "https://mirrors.aliyun.com/golang/go1.25.1.linux-amd64.tar.gz",
+        "https://dl.google.com/go/go1.25.1.linux-amd64.tar.gz",
+    ],
+)
 
 # Override golang.org/x/tools to use v0.38.0 instead of v0.30.0
 # This is necessary as this dependency is required by rules_go and they do not accept dependency
@@ -228,7 +240,7 @@ http_archive(
 go_rules_dependencies()
 
 go_register_toolchains(
-    go_version = "1.25.1",
+    # go_version = "1.25.1",
     nogo = "@//:nogo",
 )
 
