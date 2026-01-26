@@ -65,6 +65,7 @@ func logStateTransitionData(b interfaces.ReadOnlyBeaconBlock) error {
 		}
 	}
 	if b.Version() >= version.Electra {
+		log = log.WithField("blockTimeliness", b.Body().Attestations()[0].GetBlockTimeliness())
 		eReqs, err := b.Body().ExecutionRequests()
 		if err != nil {
 			log.WithError(err).Error("Failed to get execution requests")

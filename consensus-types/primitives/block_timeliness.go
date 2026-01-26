@@ -92,7 +92,7 @@ func CalculateTimeliness(elapsedMillis int64) BlockTimeliness {
 		return TimelinessInterval0to1
 	}
 	interval := elapsedMillis / TimelinessIntervalDuration
-	if interval > int64(MaxTimelinessValue) {
+	if uint64(interval) > uint64(MaxTimelinessValue) {
 		return TimelinessIntervalLate
 	}
 	return BlockTimeliness(interval)
