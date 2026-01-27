@@ -506,6 +506,12 @@ func (s *ChainService) RecentBlockSlot([32]byte) (primitives.Slot, error) {
 	return s.BlockSlot, nil
 }
 
+// BlockReceivedTime mocks the same method in the chain service.
+// Returns the genesis time as a default value for testing.
+func (s *ChainService) BlockReceivedTime([32]byte) (time.Time, error) {
+	return s.Genesis, nil
+}
+
 // HeadGenesisValidatorsRoot mocks HeadGenesisValidatorsRoot method in chain service.
 func (*ChainService) HeadGenesisValidatorsRoot() [32]byte {
 	return [32]byte{}

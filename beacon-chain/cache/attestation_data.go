@@ -9,10 +9,11 @@ import (
 )
 
 type AttestationConsensusData struct {
-	Slot     primitives.Slot
-	HeadRoot []byte
-	Target   forkchoicetypes.Checkpoint
-	Source   forkchoicetypes.Checkpoint
+	Slot            primitives.Slot
+	HeadRoot        []byte
+	Target          forkchoicetypes.Checkpoint
+	Source          forkchoicetypes.Checkpoint
+	BlockTimeliness primitives.BlockTimeliness
 }
 
 // AttestationDataCache stores cached results of AttestationData requests.

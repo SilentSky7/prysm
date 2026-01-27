@@ -52,6 +52,9 @@ type ForkchoiceFetcher interface {
 	RecentBlockSlot(root [32]byte) (primitives.Slot, error)
 	IsCanonical(ctx context.Context, blockRoot [32]byte) (bool, error)
 	DependentRoot(primitives.Epoch) ([32]byte, error)
+	// BlockReceivedTime returns the time when a block was first received by this node.
+	// Used for calculating block timeliness in attestations.
+	BlockReceivedTime(blockRoot [32]byte) (time.Time, error)
 }
 
 // TimeFetcher retrieves the Ethereum consensus data that's related to time.
@@ -550,6 +553,14 @@ func (s *Service) RecentBlockSlot(root [32]byte) (primitives.Slot, error) {
 	s.cfg.ForkChoiceStore.RLock()
 	defer s.cfg.ForkChoiceStore.RUnlock()
 	return s.cfg.ForkChoiceStore.Slot(root)
+}
+
+// BlockReceivedTime returns the time when a block was first received by this node.
+// Used for calculating block timeliness in attestations.
+func (s *Service) BlockReceivedTime(root [32]byte) (time.Time, error) {
+	s.cfg.ForkChoiceStore.RLock()
+	defer s.cfg.ForkChoiceStore.RUnlock()
+	return s.cfg.ForkChoiceStore.BlockReceivedTime(root)
 }
 
 // inRegularSync queries the initial sync service to

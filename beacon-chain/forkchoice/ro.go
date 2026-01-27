@@ -1,6 +1,8 @@
 package forkchoice
 
 import (
+	"time"
+
 	forkchoicetypes "github.com/OffchainLabs/prysm/v7/beacon-chain/forkchoice/types"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -196,4 +198,11 @@ func (ro *ROForkChoice) ParentRoot(root [32]byte) ([32]byte, error) {
 	ro.l.RLock()
 	defer ro.l.RUnlock()
 	return ro.getter.ParentRoot(root)
+}
+
+// BlockReceivedTime delegates to the underlying forkchoice call, under a lock.
+func (ro *ROForkChoice) BlockReceivedTime(root [32]byte) (time.Time, error) {
+	ro.l.RLock()
+	defer ro.l.RUnlock()
+	return ro.getter.BlockReceivedTime(root)
 }

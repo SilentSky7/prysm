@@ -3,6 +3,7 @@ package forkchoice
 import (
 	"io"
 	"testing"
+	"time"
 
 	forkchoicetypes "github.com/OffchainLabs/prysm/v7/beacon-chain/forkchoice/types"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
@@ -41,6 +42,7 @@ const (
 	parentRootCalled
 	dependentRootCalled
 	dependentRootForEpochCalled
+	blockReceivedTimeCalled
 )
 
 func _discard(t *testing.T, e error) {
@@ -321,4 +323,10 @@ func (ro *mockROForkchoice) TargetRootForEpoch(_ [32]byte, _ primitives.Epoch) (
 func (ro *mockROForkchoice) ParentRoot(_ [32]byte) ([32]byte, error) {
 	ro.calls = append(ro.calls, parentRootCalled)
 	return [32]byte{}, nil
+}
+
+// BlockReceivedTime implements FastGetter.
+func (ro *mockROForkchoice) BlockReceivedTime(_ [32]byte) (time.Time, error) {
+	ro.calls = append(ro.calls, blockReceivedTimeCalled)
+	return time.Time{}, nil
 }

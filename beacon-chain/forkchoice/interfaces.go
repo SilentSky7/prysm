@@ -86,6 +86,9 @@ type FastGetter interface {
 	UnrealizedJustifiedPayloadBlockHash() [32]byte
 	Weight(root [32]byte) (uint64, error)
 	ParentRoot(root [32]byte) ([32]byte, error)
+	// BlockReceivedTime returns the time when the block with the given root was received.
+	// This is used to calculate block timeliness for attestations.
+	BlockReceivedTime(root [32]byte) (time.Time, error)
 }
 
 // Setter allows to set forkchoice information

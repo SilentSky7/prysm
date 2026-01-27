@@ -704,3 +704,13 @@ func (f *ForkChoice) ParentRoot(root [32]byte) ([32]byte, error) {
 	}
 	return n.parent.root, nil
 }
+
+// BlockReceivedTime returns the time when the block with the given root was received.
+// This is used to calculate block timeliness for attestations.
+func (f *ForkChoice) BlockReceivedTime(root [32]byte) (time.Time, error) {
+	n, ok := f.store.nodeByRoot[root]
+	if !ok || n == nil {
+		return time.Time{}, ErrNilNode
+	}
+	return n.timestamp, nil
+}

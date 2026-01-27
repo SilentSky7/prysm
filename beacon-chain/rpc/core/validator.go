@@ -496,6 +496,7 @@ func (s *Service) GetAttestationData(
 				Epoch: res.Target.Epoch,
 				Root:  res.Target.Root[:],
 			},
+			BlockTimeliness: uint32(res.BlockTimeliness),
 		}, nil
 	}
 	s.AttestationCache.RUnlock()
@@ -520,6 +521,7 @@ func (s *Service) GetAttestationData(
 				Epoch: res.Target.Epoch,
 				Root:  res.Target.Root[:],
 			},
+			BlockTimeliness: uint32(res.BlockTimeliness),
 		}, nil
 	}
 	// cache miss, we need to check for optimistic status before proceeding
@@ -535,6 +537,25 @@ func (s *Service) GetAttestationData(
 	if err != nil {
 		return nil, &RpcError{Reason: Internal, Err: errors.Wrap(err, "could not get head root")}
 	}
+
+	// Calculate block timeliness
+	var blockTimeliness primitives.BlockTimeliness
+	blockReceivedTime, err := s.ChainInfoFetcher.BlockReceivedTime(bytesutil.ToBytes32(headRoot))
+	if err != nil {
+		// If we can't get the received time (e.g., for very old blocks), default to late
+		log.WithError(err).Debug("Could not get block received time, defaulting to late timeliness")
+		blockTimeliness = primitives.TimelinessIntervalLate
+	} else {
+		// Calculate when the slot started
+		slotStartTime, err := slots.StartTime(s.GenesisTimeFetcher.GenesisTime(), req.Slot)
+		if err != nil {
+			return nil, &RpcError{Reason: Internal, Err: errors.Wrap(err, "could not calculate slot start time")}
+		}
+		// Calculate elapsed time from slot start to when block was received
+		elapsedMillis := blockReceivedTime.Sub(slotStartTime).Milliseconds()
+		blockTimeliness = primitives.CalculateTimeliness(elapsedMillis)
+	}
+
 	targetEpoch := slots.ToEpoch(req.Slot)
 	targetRoot, err := s.HeadFetcher.TargetRootForEpoch(bytesutil.ToBytes32(headRoot), targetEpoch)
 	if err != nil {
@@ -564,6 +585,7 @@ func (s *Service) GetAttestationData(
 			Epoch: justifiedCheckpoint.Epoch,
 			Root:  bytesutil.ToBytes32(justifiedCheckpoint.Root),
 		},
+		BlockTimeliness: blockTimeliness,
 	}); err != nil {
 		log.WithError(err).Error("Failed to put attestation data into cache")
 	}
@@ -580,6 +602,7 @@ func (s *Service) GetAttestationData(
 			Epoch: targetEpoch,
 			Root:  targetRoot[:],
 		},
+		BlockTimeliness: uint32(blockTimeliness),
 	}, nil
 }
 
