@@ -208,6 +208,12 @@ type BeaconChainConfig struct {
 	WeightDenominator  uint64 `yaml:"WEIGHT_DENOMINATOR" spec:"true"`   // WeightDenominator accounts for total rewards denomination.
 	ProposerWeight     uint64 `yaml:"PROPOSER_WEIGHT" spec:"true"`      // ProposerWeight is the factor of how much proposer rewards receives.
 
+	// Block timeliness reward parameters.
+	TimelinessRewardEnabled        bool      `yaml:"TIMELINESS_REWARD_ENABLED"`         // TimelinessRewardEnabled enables the timeliness-based proposer reward mechanism.
+	TimelinessMFractionNumerator   uint64    `yaml:"TIMELINESS_M_FRACTION_NUMERATOR"`   // TimelinessMFractionNumerator is the numerator of the fraction for calculating m (e.g., 2 for 2/3).
+	TimelinessMFractionDenominator uint64    `yaml:"TIMELINESS_M_FRACTION_DENOMINATOR"` // TimelinessMFractionDenominator is the denominator of the fraction for calculating m (e.g., 3 for 2/3).
+	TimelinessRewardByInterval     [5]uint64 `yaml:"TIMELINESS_REWARD_BY_INTERVAL"`     // TimelinessRewardByInterval is the reward in Gwei for each timeliness interval [0-1s, 1-2s, 2-3s, 3-4s, 4s+].
+
 	// Validator related.
 	TargetAggregatorsPerSyncSubcommittee uint64 `yaml:"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE" spec:"true"` // TargetAggregatorsPerSyncSubcommittee for aggregating in sync committee.
 	SyncCommitteeSubnetCount             uint64 `yaml:"SYNC_COMMITTEE_SUBNET_COUNT" spec:"true"`              // SyncCommitteeSubnetCount for sync committee subnet count.

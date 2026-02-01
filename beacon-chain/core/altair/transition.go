@@ -5,7 +5,10 @@ import (
 
 	e "github.com/OffchainLabs/prysm/v7/beacon-chain/core/epoch"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/epoch/precompute"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/timeliness"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
+	"github.com/OffchainLabs/prysm/v7/config/params"
+	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/monitoring/tracing/trace"
 	"github.com/pkg/errors"
 )
@@ -104,6 +107,15 @@ func ProcessEpoch(ctx context.Context, state state.BeaconState) error {
 	if err != nil {
 		return err
 	}
+
+	// Process timeliness-based proposer rewards.
+	if err := timeliness.ProcessTimelinessRewards(ctx, state); err != nil {
+		return errors.Wrap(err, "could not process timeliness rewards")
+	}
+
+	// Reset timeliness tracker for the next epoch.
+	currentEpoch := primitives.Epoch(state.Slot() / params.BeaconConfig().SlotsPerEpoch)
+	timeliness.ResetTrackerForNewEpoch(currentEpoch + 1)
 
 	return nil
 }

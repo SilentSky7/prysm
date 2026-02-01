@@ -8,11 +8,13 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/blocks"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/time"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/timeliness"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	consensusblocks "github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
+	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	"github.com/OffchainLabs/prysm/v7/monitoring/tracing/trace"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1/attestation"
@@ -75,7 +77,69 @@ func ProcessAttestationNoVerifySignature(
 		return nil, err
 	}
 
+	// Record timeliness vote if enabled
+	if params.BeaconConfig().TimelinessRewardEnabled {
+		recordTimelinessVote(ctx, beaconState, att, committees)
+	}
+
 	return SetParticipationAndRewardProposer(ctx, beaconState, att.GetData().Target.Epoch, indices, participatedFlags, totalBalance)
+}
+
+// recordTimelinessVote records the timeliness vote from an attestation to the global tracker.
+// Only attestations where the attestation slot matches the block's slot are counted,
+// because only these attestations reflect the actual timeliness of the block.
+func recordTimelinessVote(
+	ctx context.Context,
+	beaconState state.BeaconState,
+	att ethpb.Att,
+	committees [][]primitives.ValidatorIndex,
+) {
+	data := att.GetData()
+	blockRoot := bytesutil.ToBytes32(data.BeaconBlockRoot)
+	blockTimeliness := att.GetBlockTimeliness()
+
+	// Check if the attestation is for the block in the same slot.
+	// Only same-slot attestations reflect the block's timeliness.
+	// If the block root at attestation slot doesn't match the attested block root,
+	// it means the attestation is voting for a block from a previous slot (e.g., missed slot).
+	blockRootAtAttSlot, err := helpers.BlockRootAtSlot(beaconState, data.Slot)
+	if err != nil {
+		// If we can't get the block root at slot, skip this attestation
+		return
+	}
+	if !bytes.Equal(blockRootAtAttSlot, data.BeaconBlockRoot) {
+		// The attestation is voting for a block from a different slot, skip it
+		return
+	}
+
+	// Get the number of voters from the attestation
+	voterCount := uint64(att.GetAggregationBits().Count())
+	if voterCount == 0 {
+		return
+	}
+
+	// Calculate expected voters (total committee size for this slot)
+	expectedVoters := uint64(0)
+	for _, committee := range committees {
+		expectedVoters += uint64(len(committee))
+	}
+
+	// Get the proposer index for the attested block's slot
+	proposerIndex, err := helpers.BeaconProposerIndexAtSlot(ctx, beaconState, data.Slot)
+	if err != nil {
+		// Log error but don't fail the attestation processing
+		return
+	}
+
+	// Record the vote in the global tracker
+	timeliness.GlobalTracker().RecordVote(
+		blockRoot,
+		proposerIndex,
+		data.Slot,
+		blockTimeliness,
+		voterCount,
+		expectedVoters,
+	)
 }
 
 // SetParticipationAndRewardProposer retrieves and sets the epoch participation bits in state. Based on the epoch participation, it rewards

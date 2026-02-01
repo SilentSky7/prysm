@@ -249,6 +249,14 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	ProposerWeight:     8,
 	WeightDenominator:  64,
 
+	// Block timeliness reward parameters.
+	TimelinessRewardEnabled:        true,
+	TimelinessMFractionNumerator:   2,
+	TimelinessMFractionDenominator: 3,
+	// Rewards in Gwei for each timeliness interval: [0-1s, 1-2s, 2-3s, 3-4s, 4s+]
+	// 2 ETH, 1.5 ETH, 1 ETH, 0.5 ETH, 0 ETH
+	TimelinessRewardByInterval: [5]uint64{2_000_000_000, 1_500_000_000, 1_000_000_000, 500_000_000, 0},
+
 	// Validator related values.
 	TargetAggregatorsPerSyncSubcommittee: 16,
 	SyncCommitteeSubnetCount:             4,
