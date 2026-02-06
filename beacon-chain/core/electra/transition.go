@@ -119,14 +119,15 @@ func ProcessEpoch(ctx context.Context, state state.BeaconState) error {
 		return err
 	}
 
-	// Process timeliness-based proposer rewards.
+	// Process timeliness-based proposer rewards for the previous epoch's blocks.
+	// Their attestation inclusion window is now closed, so all votes are collected.
 	if err := timeliness.ProcessTimelinessRewards(ctx, state); err != nil {
 		return errors.Wrap(err, "could not process timeliness rewards")
 	}
 
-	// Reset timeliness tracker for the next epoch.
+	// Rotate timeliness tracker: move current epoch votes to previous, start fresh.
 	currentEpoch := primitives.Epoch(state.Slot() / params.BeaconConfig().SlotsPerEpoch)
-	timeliness.ResetTrackerForNewEpoch(currentEpoch + 1)
+	timeliness.RotateTrackerEpoch(currentEpoch + 1)
 
 	return nil
 }

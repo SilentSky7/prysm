@@ -1,4 +1,14 @@
 // Package timeliness provides tracking of block timeliness votes for dynamic proposer rewards.
+//
+// Because attestations for a block may span two epochs (an attestation's inclusion window is
+// SLOTS_PER_EPOCH slots), the tracker maintains two vote maps:
+//   - currentVotes: votes for blocks proposed in the current epoch
+//   - previousVotes: votes for blocks proposed in the previous epoch
+//
+// At each epoch boundary (end of epoch N):
+//  1. Process rewards from previousVotes (epoch N-1 blocks; their inclusion window is now closed).
+//  2. Rotate: previousVotes = currentVotes (epoch N blocks still accepting attestations).
+//  3. Clear currentVotes for epoch N+1.
 package timeliness
 
 import (
@@ -24,12 +34,17 @@ type BlockVotes struct {
 	ExpectedVoters uint64
 }
 
-// Tracker tracks timeliness votes for blocks across an epoch.
-// It aggregates votes from attestations and calculates rewards at epoch boundaries.
+// Tracker tracks timeliness votes for blocks across epochs.
+// It maintains two vote windows to handle attestations that span epoch boundaries:
+//   - currentVotes: accumulates votes for blocks in the current epoch
+//   - previousVotes: accumulates remaining votes for blocks in the previous epoch
 type Tracker struct {
 	mu sync.RWMutex
-	// votes maps block root to its vote data.
-	votes map[[32]byte]*BlockVotes
+	// currentVotes maps block root to vote data for blocks in the current epoch.
+	currentVotes map[[32]byte]*BlockVotes
+	// previousVotes maps block root to vote data for blocks in the previous epoch.
+	// These blocks' inclusion windows may still be open at the start of the current epoch.
+	previousVotes map[[32]byte]*BlockVotes
 	// currentEpoch tracks which epoch we're collecting votes for.
 	currentEpoch primitives.Epoch
 }
@@ -37,7 +52,8 @@ type Tracker struct {
 // NewTracker creates a new timeliness tracker.
 func NewTracker() *Tracker {
 	return &Tracker{
-		votes: make(map[[32]byte]*BlockVotes),
+		currentVotes:  make(map[[32]byte]*BlockVotes),
+		previousVotes: make(map[[32]byte]*BlockVotes),
 	}
 }
 
@@ -56,6 +72,9 @@ func GlobalTracker() *Tracker {
 }
 
 // RecordVote records a timeliness vote for a block.
+// The vote is placed into the appropriate map (current or previous) based on the
+// block's epoch. Votes for blocks older than the previous epoch are discarded.
+//
 // blockRoot: the root of the block being voted on
 // proposerIndex: the proposer of the block
 // slot: the slot of the block
@@ -73,14 +92,29 @@ func (t *Tracker) RecordVote(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	votes, exists := t.votes[blockRoot]
+	// Determine which epoch this block belongs to.
+	blockEpoch := primitives.Epoch(uint64(slot) / uint64(params.BeaconConfig().SlotsPerEpoch))
+
+	// Select the appropriate vote map.
+	var targetVotes map[[32]byte]*BlockVotes
+	switch {
+	case blockEpoch == t.currentEpoch:
+		targetVotes = t.currentVotes
+	case t.currentEpoch > 0 && blockEpoch == t.currentEpoch-1:
+		targetVotes = t.previousVotes
+	default:
+		// Block is too old (more than 1 epoch behind) or from the future; discard.
+		return
+	}
+
+	votes, exists := targetVotes[blockRoot]
 	if !exists {
 		votes = &BlockVotes{
 			ProposerIndex:  proposerIndex,
 			Slot:           slot,
 			ExpectedVoters: expectedVoters,
 		}
-		t.votes[blockRoot] = votes
+		targetVotes[blockRoot] = votes
 	}
 
 	// Ensure timeliness is within valid range
@@ -97,28 +131,47 @@ func (t *Tracker) RecordVote(
 	}
 }
 
-// GetBlockVotes returns the vote data for a specific block.
+// GetBlockVotes returns the vote data for a specific block, searching both maps.
 func (t *Tracker) GetBlockVotes(blockRoot [32]byte) (*BlockVotes, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	votes, exists := t.votes[blockRoot]
-	if !exists {
-		return nil, false
+	if votes, exists := t.currentVotes[blockRoot]; exists {
+		votesCopy := *votes
+		return &votesCopy, true
 	}
-
-	// Return a copy to avoid race conditions
-	votesCopy := *votes
-	return &votesCopy, true
+	if votes, exists := t.previousVotes[blockRoot]; exists {
+		votesCopy := *votes
+		return &votesCopy, true
+	}
+	return nil, false
 }
 
-// GetAllBlockVotes returns all block votes in the tracker.
+// GetPreviousEpochVotes returns all block votes from the previous epoch.
+// These votes are ready to be processed for rewards because their inclusion window is closed.
+func (t *Tracker) GetPreviousEpochVotes() map[[32]byte]*BlockVotes {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	result := make(map[[32]byte]*BlockVotes, len(t.previousVotes))
+	for root, votes := range t.previousVotes {
+		votesCopy := *votes
+		result[root] = &votesCopy
+	}
+	return result
+}
+
+// GetAllBlockVotes returns all block votes (both current and previous epochs).
 func (t *Tracker) GetAllBlockVotes() map[[32]byte]*BlockVotes {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	result := make(map[[32]byte]*BlockVotes, len(t.votes))
-	for root, votes := range t.votes {
+	result := make(map[[32]byte]*BlockVotes, len(t.currentVotes)+len(t.previousVotes))
+	for root, votes := range t.previousVotes {
+		votesCopy := *votes
+		result[root] = &votesCopy
+	}
+	for root, votes := range t.currentVotes {
 		votesCopy := *votes
 		result[root] = &votesCopy
 	}
@@ -164,12 +217,30 @@ func CalculateReward(timeliness primitives.BlockTimeliness) uint64 {
 	return cfg.TimelinessRewardByInterval[timeliness]
 }
 
-// ResetForEpoch clears all votes and prepares the tracker for a new epoch.
+// RotateEpoch performs the epoch boundary rotation:
+//  1. The caller should first process rewards from previousVotes (inclusion window closed).
+//  2. This method then moves currentVotes → previousVotes and starts a fresh currentVotes.
+//
+// newEpoch is the epoch about to begin (currentEpoch + 1).
+func (t *Tracker) RotateEpoch(newEpoch primitives.Epoch) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// The previous epoch data should already have been processed for rewards
+	// by the caller. Now rotate.
+	t.previousVotes = t.currentVotes
+	t.currentVotes = make(map[[32]byte]*BlockVotes)
+	t.currentEpoch = newEpoch
+}
+
+// ResetForEpoch clears all votes and prepares the tracker for a specific epoch.
+// This is useful for initialization or testing.
 func (t *Tracker) ResetForEpoch(epoch primitives.Epoch) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.votes = make(map[[32]byte]*BlockVotes)
+	t.currentVotes = make(map[[32]byte]*BlockVotes)
+	t.previousVotes = make(map[[32]byte]*BlockVotes)
 	t.currentEpoch = epoch
 }
 

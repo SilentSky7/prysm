@@ -12,8 +12,8 @@ import (
 )
 
 // ProcessTimelinessRewards processes timeliness-based rewards at epoch boundaries.
-// It calculates rewards for each block proposer based on the m-th smallest timeliness
-// vote received for their blocks.
+// It processes rewards only for the previous epoch's blocks, whose attestation inclusion
+// window is now closed, ensuring all votes have been collected.
 func ProcessTimelinessRewards(ctx context.Context, beaconState state.BeaconState) error {
 	cfg := params.BeaconConfig()
 	if !cfg.TimelinessRewardEnabled {
@@ -21,14 +21,15 @@ func ProcessTimelinessRewards(ctx context.Context, beaconState state.BeaconState
 	}
 
 	tracker := GlobalTracker()
-	allVotes := tracker.GetAllBlockVotes()
+	// Only process rewards for the previous epoch — those blocks' inclusion windows are closed.
+	prevVotes := tracker.GetPreviousEpochVotes()
 
-	if len(allVotes) == 0 {
+	if len(prevVotes) == 0 {
 		return nil
 	}
 
 	// Process rewards for each block that received votes
-	for blockRoot, votes := range allVotes {
+	for blockRoot, votes := range prevVotes {
 		if votes.TotalVotes == 0 {
 			continue
 		}
@@ -73,8 +74,9 @@ func ProcessTimelinessRewards(ctx context.Context, beaconState state.BeaconState
 	return nil
 }
 
-// ResetTrackerForNewEpoch resets the tracker for a new epoch.
-// This should be called after ProcessTimelinessRewards at epoch boundaries.
-func ResetTrackerForNewEpoch(epoch primitives.Epoch) {
-	GlobalTracker().ResetForEpoch(epoch)
+// RotateTrackerEpoch rotates the timeliness tracker at epoch boundaries.
+// This should be called AFTER ProcessTimelinessRewards. It moves current epoch
+// votes to previous (for continued collection) and starts a fresh current map.
+func RotateTrackerEpoch(newEpoch primitives.Epoch) {
+	GlobalTracker().RotateEpoch(newEpoch)
 }
