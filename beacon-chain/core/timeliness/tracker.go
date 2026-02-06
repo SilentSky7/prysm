@@ -145,7 +145,7 @@ func (t *Tracker) CalculateMthSmallestTimeliness(votes *BlockVotes) primitives.B
 // If there are fewer than m votes, returns the largest timeliness (late).
 func GetMthSmallestTimeliness(voteCounts [5]uint64, m uint64) primitives.BlockTimeliness {
 	cumulative := uint64(0)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		cumulative += voteCounts[i]
 		if cumulative >= m {
 			return primitives.BlockTimeliness(i)

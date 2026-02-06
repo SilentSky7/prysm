@@ -7,6 +7,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
+	"github.com/OffchainLabs/prysm/v7/time/slots"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -54,6 +55,7 @@ func ProcessTimelinessRewards(ctx context.Context, beaconState state.BeaconState
 		log.WithFields(log.Fields{
 			"proposerIndex":  votes.ProposerIndex,
 			"slot":           votes.Slot,
+			"epoch":          slots.ToEpoch(votes.Slot),
 			"mthTimeliness":  mthTimeliness.String(),
 			"reward":         reward,
 			"totalVotes":     votes.TotalVotes,
