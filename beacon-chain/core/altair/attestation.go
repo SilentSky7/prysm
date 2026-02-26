@@ -36,6 +36,22 @@ func ProcessAttestationsNoVerifySignature(
 	if err != nil {
 		return nil, err
 	}
+
+	// Record timeliness votes once per containing block to prevent double-counting
+	// during state replays. The check is done at the block level before iterating attestations.
+	if params.BeaconConfig().TimelinessRewardEnabled {
+		containingBlockRoot, err := b.HashTreeRoot()
+		if err == nil {
+			tracker := timeliness.GlobalTracker()
+			if !tracker.IsBlockProcessed(containingBlockRoot) {
+				for _, att := range body.Attestations() {
+					recordTimelinessVote(ctx, beaconState, att)
+				}
+				tracker.MarkBlockProcessed(containingBlockRoot)
+			}
+		}
+	}
+
 	for idx, att := range body.Attestations() {
 		beaconState, err = ProcessAttestationNoVerifySignature(ctx, beaconState, att, totalBalance)
 		if err != nil {
@@ -77,11 +93,6 @@ func ProcessAttestationNoVerifySignature(
 		return nil, err
 	}
 
-	// Record timeliness vote if enabled
-	if params.BeaconConfig().TimelinessRewardEnabled {
-		recordTimelinessVote(ctx, beaconState, att, committees)
-	}
-
 	return SetParticipationAndRewardProposer(ctx, beaconState, att.GetData().Target.Epoch, indices, participatedFlags, totalBalance)
 }
 
@@ -92,7 +103,6 @@ func recordTimelinessVote(
 	ctx context.Context,
 	beaconState state.BeaconState,
 	att ethpb.Att,
-	committees [][]primitives.ValidatorIndex,
 ) {
 	data := att.GetData()
 	blockRoot := bytesutil.ToBytes32(data.BeaconBlockRoot)
@@ -119,6 +129,10 @@ func recordTimelinessVote(
 	}
 
 	// Calculate expected voters (total committee size for this slot)
+	committees, err := helpers.AttestationCommitteesFromState(ctx, beaconState, att)
+	if err != nil {
+		return
+	}
 	expectedVoters := uint64(0)
 	for _, committee := range committees {
 		expectedVoters += uint64(len(committee))

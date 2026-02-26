@@ -38,6 +38,9 @@ type BlockVotes struct {
 // It maintains two vote windows to handle attestations that span epoch boundaries:
 //   - currentVotes: accumulates votes for blocks in the current epoch
 //   - previousVotes: accumulates remaining votes for blocks in the previous epoch
+//
+// A processedBlocks set ensures each containing block's attestations are recorded
+// exactly once, preventing double-counting during state replays.
 type Tracker struct {
 	mu sync.RWMutex
 	// currentVotes maps block root to vote data for blocks in the current epoch.
@@ -45,6 +48,9 @@ type Tracker struct {
 	// previousVotes maps block root to vote data for blocks in the previous epoch.
 	// These blocks' inclusion windows may still be open at the start of the current epoch.
 	previousVotes map[[32]byte]*BlockVotes
+	// processedBlocks tracks which containing blocks have already had their
+	// attestations recorded, to prevent double-counting during state replays.
+	processedBlocks map[[32]byte]bool
 	// currentEpoch tracks which epoch we're collecting votes for.
 	currentEpoch primitives.Epoch
 }
@@ -52,8 +58,9 @@ type Tracker struct {
 // NewTracker creates a new timeliness tracker.
 func NewTracker() *Tracker {
 	return &Tracker{
-		currentVotes:  make(map[[32]byte]*BlockVotes),
-		previousVotes: make(map[[32]byte]*BlockVotes),
+		currentVotes:    make(map[[32]byte]*BlockVotes),
+		previousVotes:   make(map[[32]byte]*BlockVotes),
+		processedBlocks: make(map[[32]byte]bool),
 	}
 }
 
@@ -230,6 +237,7 @@ func (t *Tracker) RotateEpoch(newEpoch primitives.Epoch) {
 	// by the caller. Now rotate.
 	t.previousVotes = t.currentVotes
 	t.currentVotes = make(map[[32]byte]*BlockVotes)
+	t.processedBlocks = make(map[[32]byte]bool)
 	t.currentEpoch = newEpoch
 }
 
@@ -241,6 +249,7 @@ func (t *Tracker) ResetForEpoch(epoch primitives.Epoch) {
 
 	t.currentVotes = make(map[[32]byte]*BlockVotes)
 	t.previousVotes = make(map[[32]byte]*BlockVotes)
+	t.processedBlocks = make(map[[32]byte]bool)
 	t.currentEpoch = epoch
 }
 
@@ -249,4 +258,19 @@ func (t *Tracker) CurrentEpoch() primitives.Epoch {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.currentEpoch
+}
+
+// IsBlockProcessed returns true if attestations from the given containing block
+// have already been recorded. This prevents double-counting during state replays.
+func (t *Tracker) IsBlockProcessed(containingBlockRoot [32]byte) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.processedBlocks[containingBlockRoot]
+}
+
+// MarkBlockProcessed marks a containing block as having had its attestations recorded.
+func (t *Tracker) MarkBlockProcessed(containingBlockRoot [32]byte) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.processedBlocks[containingBlockRoot] = true
 }
